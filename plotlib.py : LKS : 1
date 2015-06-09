@@ -1,0 +1,80 @@
+
+import matplotlib
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
+import numpy as np
+import os
+
+
+def plotxy(x,y,fname, dir):
+    
+    font = {'family' : 'sans-serif',
+            'weight' : 'bold',
+            'size'   : 20}
+
+    matplotlib.rc('font', **font)
+
+    plt.figure(0)
+    plt.plot(x,y,'ro-')
+    plt.ylabel('x')
+    plt.xlabel('y')
+    subdir_name=dir
+    if not os.path.exists(subdir_name):
+        os.umask(0) # unmask if necessary
+        os.makedirs(subdir_name, 0777) 
+    os.chdir(subdir_name)#
+    plt.savefig(fname+'.png',format='png')
+    os.chdir('..')
+    plt.close(0)
+
+
+def plotxyz(x,y,z,fname, dir):
+    
+    font = {'family' : 'sans-serif',
+            'weight' : 'bold',
+            'size'   : 20}
+
+    matplotlib.rc('font', **font)
+
+    fig=plt.figure(0,figsize=(16,8))
+    ax=fig.gca()
+    plt.contourf(x,y,z.transpose(),100)
+    plt.colorbar()
+    ax.set_aspect('equal')
+#    plt.ylabel('x')
+#    plt.xlabel('y')
+    subdir_name=dir
+    if not os.path.exists(subdir_name):
+        os.umask(0) # unmask if necessary
+        os.makedirs(subdir_name, 0777) 
+    os.chdir(subdir_name)#
+    plt.savefig(fname+'.png',format='png')
+    os.chdir('..')
+    plt.close(0)
+
+
+def plotxyz_surf(x,y,z,fname,dir):
+    
+    font = {'family' : 'sans-serif',
+            'weight' : 'bold',
+            'size'   : 20}
+
+    matplotlib.rc('font', **font)
+
+    fig = plt.figure(0)
+    ax = fig.gca(projection='3d')
+    X,Y=np.meshgrid(x,y)
+    surf=ax.plot_surface(X,Y,z.transpose(),rstride=1,cstride=1,cmap=cm.coolwarm,linewidth=0)
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+#    plt.ylabel('x')
+#    plt.xlabel('y')
+    subdir_name=dir
+    if not os.path.exists(subdir_name):
+        os.umask(0) # unmask if necessary
+        os.makedirs(subdir_name, 0777) 
+    os.chdir(subdir_name)#
+    plt.savefig(fname+'.png')
+    os.chdir('..')
+    plt.close(0)
+    
