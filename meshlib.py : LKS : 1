@@ -1,0 +1,319 @@
+import numpy as np
+import cPickle as pickle
+import os
+
+class Mesh1D(object):
+    """1D uniform mesh class"""
+
+    def __init__(self,nz=1,xmin=0.0,xmax=1.0):
+        self.nz=nz
+        self.xmin=xmin
+        self.xmax=xmax
+        self.np=nz+1
+        self.dx=(xmax-xmin)/nz
+
+        self.px=np.linspace(xmin,xmax,self.np)
+        self.zx = np.zeros(nz)
+        for i in range(nz):
+            self.zx[i]=0.5*(self.px[i]+self.px[i+1])
+
+class zvar(object):
+    """zone centered variable"""
+
+    def __init__(self,mesh):        
+        self.f=np.zeros(mesh.nz)
+
+class zvarg(object):
+    """zone centered variable w/boundary storage"""
+
+    def __init__(self,mesh):        
+        self.f=np.zeros(mesh.nz+2)   
+        self.fp=np.zeros(mesh.nz+2)
+        self.f2p=np.zeros(mesh.nz+2)
+
+    def calcgrads(self,mesh):
+        self.f[mesh.nz]=self.f[0]
+        self.f[mesh.nz+1]=self.f[mesh.nz-1]
+
+        for i in range(mesh.nz):
+            self.fp[i] = (self.f[i+1]-self.f[i-1])/(2.*mesh.dx)
+
+        self.fp[mesh.nz]=self.fp[0]
+        self.fp[mesh.nz+1]=self.fp[mesh.nz-1]
+
+
+        for i in range(mesh.nz):
+            self.f2p[i] = (self.f[i+1]-2.*self.f[i]+
+                           self.f[i-1])/(mesh.dx**2)
+
+    def setf(self,f):
+        self.f[:f.size]=f
+
+
+class pvar(object):
+    """point centered variable"""
+
+    def __init__(self,mesh):        
+        self.f=np.zeros(mesh.np)
+        
+    
+
+
+class Mesh2D(object):
+    """2D uniform mesh class"""
+
+    def __init__(self,nzx=1,nzy=1,xmin=0.0,xmax=1.0,ymin=0.0,ymax=1.0):
+        self.nzx=nzx
+        self.nzy=nzy
+        self.xmin=xmin
+        self.xmax=xmax
+        self.ymin=ymin
+        self.ymax=ymax
+        self.npx=nzx+1
+        self.npy=nzy+1
+        self.dx=(xmax-xmin)/nzx
+        self.dy=(ymax-ymin)/nzy
+
+        self.px=np.linspace(xmin,xmax,self.npx)
+ 
+        self.zx = np.zeros(nzx)
+        for i in range(nzx):
+            self.zx[i]=0.5*(self.px[i]+self.px[i+1])
+
+        self.py=np.linspace(ymin,ymax,self.npy)
+
+        self.zy = np.zeros(nzy)
+        for i in range(nzy):
+            self.zy[i]=0.5*(self.py[i]+self.py[i+1])
+
+
+class zvar2d(object):
+    """zone centered variable"""
+
+    def __init__(self,mesh):        
+        self.f=np.zeros((mesh.nzx,mesh.nzy))
+
+
+    def setmean_zero(self,mesh):
+
+        # Set BC first
+        self.f = self.f - self.f.mean()
+
+class pvar2d(object):
+    """point centered variable"""
+
+    def __init__(self,mesh):        
+        self.f=np.zeros((mesh.npx,mesh.npy))
+
+    def setf(self,f):
+        self.f[:,:]=f[:self.f.shape[0],:self.f.shape[1]]
+
+    def setmean_zero(self,mesh):
+
+        # Set BC first
+        self.f = self.f - self.f.mean()
+
+class zvarg2d(object):
+    """zone centered variable with boundary storage"""
+
+    def __init__(self,mesh):        
+        self.f=np.zeros((mesh.nzx+2,mesh.nzy+2))  
+        self.fzdxp = np.zeros((mesh.npx,mesh.npy))
+        self.fzdyp = np.zeros((mesh.npx,mesh.npy))
+
+    def setbc_periodic(self,mesh):
+
+        # Set BC first
+        self.f[mesh.nzx,:]=self.f[0,:]
+        self.f[mesh.nzx+1,:]=self.f[mesh.nzx-1,:]
+        self.f[:,mesh.nzy]=self.f[:,0]
+        self.f[:,mesh.nzy+1]=self.f[:,mesh.nzy-1]
+
+    def setbc_neumann(self,mesh):
+
+        # Set BC first
+        self.f[mesh.nzx,:]=self.f[mesh.nzx-1,:]
+        self.f[mesh.nzx+1,:]=self.f[0,:]
+        self.f[:,mesh.nzy]=self.f[:,mesh.nzy-1]
+        self.f[:,mesh.nzy+1]=self.f[:,0]
+
+    def setmean_zero(self,mesh):
+
+        # Set BC first
+        self.f = self.f - self.f.mean()
+
+    def calcgrads(self,mesh):
+
+        for i in np.arange(mesh.nzx+1):
+            for j in np.arange(mesh.nzy+1):
+                fx0=0.5*(self.f[i-1,j]+self.f[i-1,j-1])
+                fx1=0.5*(self.f[i,j]+self.f[i,j-1])
+                self.fzdxp[i,j] = (fx1-fx0)/(mesh.dx)
+
+        for i in np.arange(mesh.nzx+1):
+            for j in np.arange(mesh.nzy+1):            
+                fy0=0.5*(self.f[i,j-1]+self.f[i-1,j-1])
+                fy1=0.5*(self.f[i,j]+self.f[i-1,j])
+                self.fzdyp[i,j] = (fy1-fy0)/(mesh.dy)
+
+
+
+    def setf(self,f):
+        self.f[:f.shape[0],:f.shape[1]]=f
+
+
+    def calcerr(self,mesh,f):
+                
+        L1=np.max(np.abs(self.f[:f.shape[0],:f.shape[1]]-f))
+        L2=np.linalg.norm(self.f[:f.shape[0],:f.shape[1]]-f)
+        
+        return [L1,L2]
+
+
+class pvarg2d(object):
+    """point centered variable w/boundary storage"""
+
+    def __init__(self,mesh):        
+        self.f=np.zeros((mesh.npx+2,mesh.npy+2))  
+        self.fdx=np.zeros((mesh.npx+2,mesh.npy+2))
+        self.fdy=np.zeros((mesh.npx+2,mesh.npy+2))
+        self.fd2x=np.zeros((mesh.npx+2,mesh.npy+2))
+        self.fd2y=np.zeros((mesh.npx+2,mesh.npy+2))
+        self.fpdivz=np.zeros((mesh.nzx+2,mesh.nzy+2))
+
+    def setbc_periodic(self,mesh):
+
+        # Set BC first
+        self.f[mesh.npx,:]=self.f[0,:]
+        self.f[mesh.npx+1,:]=self.f[mesh.npx-1,:]
+        self.f[:,mesh.npy]=self.f[:,0]
+        self.f[:,mesh.npy+1]=self.f[:,mesh.npy-1]
+
+    def setbc(self,mesh,bdy,bdy_type,kbc=None):
+
+        if bdy == 'top' :
+
+            if bdy_type == 'extrap' :
+                self.f[:,mesh.npy]=self.f[:,mesh.npy-1]
+
+            elif bdy_type == 'dirichlet' :
+                self.f[:,mesh.npy]=kbc
+                self.f[:,mesh.npy-1]=kbc
+            
+        elif bdy == 'bottom' :
+
+            if bdy_type == 'extrap' :
+                self.f[:,-1]=self.f[:,0]
+
+            elif bdy_type == 'dirichlet' :
+                self.f[:,-1]=kbc
+                self.f[:,0]=kbc
+
+            elif bdy_type == 'reflect' :
+                self.f[:,-1]=self.f[:,1]
+
+
+        elif bdy == 'right' :
+
+            if bdy_type == 'extrap' :
+                self.f[mesh.npx,:]=self.f[mesh.npx-1,:]
+
+            elif bdy_type == 'dirichlet' :
+                self.f[mesh.npx,:]=kbc
+                self.f[mesh.npx-1,:]=kbc
+
+        elif bdy == 'left' :
+
+            if bdy_type == 'extrap' :
+                self.f[-1,:]=self.f[0,:]
+
+
+            elif bdy_type == 'dirichlet' :
+                self.f[0,:]=kbc
+                self.f[-1,:]=kbc
+
+
+    def setbc_neumann(self,mesh):
+
+        # Set BC first
+        self.f[mesh.npx,:]=self.f[mesh.npx-1,:]
+        self.f[mesh.npx+1,:]=self.f[0,:]
+        self.f[:,mesh.npy]=self.f[:,mesh.npy-1]
+        self.f[:,mesh.npy+1]=self.f[:,0]
+
+    def setmean_zero(self,mesh):
+
+        # Set BC first
+        avg = np.mean(self.f[:mesh.npx,:,mesh.npy])
+        self.f = self.f - avg
+
+    def calcgrads(self,mesh):
+
+        for i in range(mesh.npx):
+            self.fdx[i,:] = (self.f[i+1,:]-self.f[i-1,:])/(2.*mesh.dx)
+
+        for i in range(mesh.npy):
+            self.fdy[:,i] = (self.f[:,i+1]-self.f[:,i-1])/(2.*mesh.dy)
+
+
+        for i in range(mesh.npx):
+            self.fd2x[i,:] = (self.f[i+1,:]-2.*self.f[i,:]+
+                             self.f[i-1,:])/(mesh.dx**2)
+
+        for i in range(mesh.npy):
+            self.fd2y[:,i] = (self.f[:,i+1]-2.*self.f[:,i]+
+                             self.f[:,i-1])/(mesh.dy**2)
+                          
+
+    def setf(self,f):
+        self.f[:f.shape[0],:f.shape[1]]=f
+
+
+    def calcerr(self,mesh,f):
+        
+        L1=np.max(np.abs(self.f[:f.shape[0],:f.shape[1]]-f))
+        L2=np.linalg.norm(self.f[:f.shape[0],:f.shape[1]]-f)
+        
+        return [L1,L2]
+        
+
+def diverge(mesh,u,v):
+    div = zvar2d(mesh)
+    
+    for i in np.arange(mesh.npx-1):
+        for j in np.arange(mesh.npy-1):
+            fx0 = 0.5*(u[i,j]+u[i,j+1])
+            fx1  = 0.5*(u[i+1,j]+u[i+1,j+1])
+            fy0 = 0.5*(v[i,j]+v[i+1,j])
+            fy1  = 0.5*(v[i,j+1]+v[i+1,j+1])
+            div.f[i,j] = (fx1-fx0)/mesh.dx + (fy1-fy0)/mesh.dy
+        
+    return div
+
+def write_plane(mesh,f,plane,idim,filename):
+    subdir_name='DataFiles'
+    if not os.path.exists(subdir_name):
+        os.umask(0) # unmask if necessary
+        os.makedirs(subdir_name, 0777) 
+    os.chdir(subdir_name)#
+    if plane == 'x':
+            pickle.dump(mesh.px,open("Points_"+filename, 'wb'))
+    elif plane=='y':
+            pickle.dump(mesh.py, open("Points_"+filename, 'wb'))
+    cPickle.dump(f[idim], open("Data_"+filename, 'wb'))
+    os.chdir('..')
+        
+    
+#def write_plane(mesh,f,plane,idim,filename):
+#    if plane == 'x':
+#        outfile=open(filename,'w')
+#        for i in np.arange(f.shape[0]):
+#            outfile.write(str(mesh.px[i])+'\t')
+#            outfile.write(str(f[i,idim])+'\n')
+#        outfile.close()
+#    elif plane == 'y':
+#        outfile=open(filename,'w')
+#        for i in np.arange(f.shape[1]):
+#            outfile.write(str(mesh.py[i])+'\t')
+#            outfile.write(str(f[idim,i])+'\n')
+#        outfile.close()
